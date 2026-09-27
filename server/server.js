@@ -1,28 +1,31 @@
 import express from 'express';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
+import cors from 'cors';
+import issueRoutes from './routes/issueRoutes.js';
 
-// 1. Load the secret MONGO_URI from the .env file
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// 2. Allow our server to accept JSON data
+// Enable CORS and JSON parsing
+app.use(cors());
 app.use(express.json());
 
-// 3. A quick test route to check if server responds
+// Routes
+app.use('/api/issues', issueRoutes);
+
+// Health check route
 app.get('/api/test', (req, res) => {
   res.json({ message: 'Civic Pulse API is working!' });
 });
 
-// 4. Connect to MongoDB Atlas
+// Connect to MongoDB Atlas and start server
 mongoose
   .connect(process.env.MONGO_URI)
   .then(() => {
     console.log(' Connected to MongoDB Atlas successfully');
-    
-    // Only start the server AFTER the database connects successfully
     app.listen(PORT, () => {
       console.log(` Server running on http://localhost:${PORT}`);
     });
