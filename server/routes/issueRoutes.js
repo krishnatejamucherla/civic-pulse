@@ -32,4 +32,24 @@ router.get('/', async (req, res) => {
   }
 });
 
+// @route   PATCH /api/issues/:id/upvote
+// @desc    Increment upvote count for an issue
+router.patch('/:id/upvote', async (req, res) => {
+  try {
+    const updatedIssue = await Issue.findByIdAndUpdate(
+      req.params.id,
+      { $inc: { upvotes: 1 } },
+      { new: true }
+    );
+
+    if (!updatedIssue) {
+      return res.status(404).json({ error: 'Issue not found' });
+    }
+
+    res.status(200).json(updatedIssue);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
 export default router;

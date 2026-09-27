@@ -48,7 +48,7 @@ function App() {
         }
       });
 
-      // Clear input fields and refresh the list
+      // Clear input fields and refresh the feed
       setFormData({
         title: '',
         description: '',
@@ -61,6 +61,17 @@ function App() {
       alert('Failed to report issue. Ensure backend server is running on port 5000.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Upvote an issue
+  const handleUpvote = async (id) => {
+    try {
+      const res = await axios.patch(`http://localhost:5000/api/issues/${id}/upvote`);
+      // Update local state so count increases instantly without page reload
+      setIssues(issues.map((issue) => (issue._id === id ? res.data : issue)));
+    } catch (err) {
+      console.error('Failed to upvote issue:', err);
     }
   };
 
@@ -146,6 +157,22 @@ function App() {
                   <strong>Location:</strong> {issue.location?.address} |{' '}
                   <strong>Status:</strong> {issue.status} |{' '}
                   <strong>Reported on:</strong> {new Date(issue.createdAt).toLocaleDateString()}
+                </div>
+                <div style={{ marginTop: '0.8rem' }}>
+                  <button
+                    onClick={() => handleUpvote(issue._id)}
+                    style={{
+                      background: '#e0f2fe',
+                      color: '#0369a1',
+                      border: '1px solid #bae6fd',
+                      padding: '6px 12px',
+                      borderRadius: '5px',
+                      cursor: 'pointer',
+                      fontWeight: '600'
+                    }}
+                  >
+                    ▲ Upvote ({issue.upvotes})
+                  </button>
                 </div>
               </div>
             ))
