@@ -4,45 +4,68 @@ const issueSchema = new mongoose.Schema(
   {
     title: {
       type: String,
-      required: [true, 'Please provide an issue title'],
+      required: [true, 'Title is required'],
       trim: true,
-      maxlength: [100, 'Title cannot exceed 100 characters']
     },
+
     description: {
       type: String,
-      required: [true, 'Please provide a detailed description'],
-      trim: true
+      required: [true, 'Description is required'],
     },
+
+    // Citizen who reported this issue
+    reportedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+    },
+
     category: {
       type: String,
-      required: [true, 'Please specify a category'],
-      enum: ['Pothole', 'Streetlight', 'Garbage', 'Water Supply', 'Other'],
-      default: 'Other'
+      required: true,
+      enum: [
+        'Pothole',
+        'Road Damage / Potholes',
+        'Streetlight',
+        'Streetlight Fault',
+        'Garbage',
+        'Garbage Overflow',
+        'Water Supply',
+        'Water Supply Issue',
+        'Other',
+      ],
+      default: 'Road Damage / Potholes',
     },
-    location: {
-      address: {
-        type: String,
-        required: [true, 'Please provide an address or landmark']
-      },
-      latitude: {
-        type: Number
-      },
-      longitude: {
-        type: Number
-      }
-    },
+
     status: {
       type: String,
       enum: ['Reported', 'In Progress', 'Resolved'],
-      default: 'Reported'
+      default: 'Reported',
     },
+
+    location: {
+      address: {
+        type: String,
+        required: true,
+      },
+
+      coordinates: {
+        type: [Number], // [latitude, longitude]
+        default: [17.3850, 78.4867],
+      },
+    },
+
+    imageUrl: {
+      type: String,
+      default: '',
+    },
+
     upvotes: {
       type: Number,
-      default: 0
-    }
+      default: 0,
+    },
   },
   {
-    timestamps: true
+    timestamps: true,
   }
 );
 
