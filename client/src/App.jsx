@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
+import L from 'leaflet';
 import {
   MapContainer,
   TileLayer,
@@ -8,7 +9,6 @@ import {
   useMap,
   useMapEvents,
 } from 'react-leaflet';
-import L from 'leaflet';
 import {
   ShieldCheck,
   PlusCircle,
@@ -69,8 +69,36 @@ function MapClickHandler({ onLocationSelect }) {
   return null;
 }
 
+
+const redMarkerIcon = L.divIcon({
+  className: 'red-marker',
+  html: '<div style="background:red;width:18px;height:18px;border-radius:50%;border:3px solid white;"></div>',
+  iconSize: [24, 24],
+  iconAnchor: [12, 12],
+});
+
 function App() {
   const [issues, setIssues] = useState([]);
+
+  // Authentication
+  const [token, setToken] = useState(
+    localStorage.getItem('civicpulse_token')
+  );
+
+  const [user, setUser] = useState(() => {
+    const savedUser = localStorage.getItem('civicpulse_user');
+    return savedUser ? JSON.parse(savedUser) : null;
+  });
+
+  const [authMode, setAuthMode] = useState('login');
+
+  const [authData, setAuthData] = useState({
+    name: '',
+    email: '',
+    password: '',
+  });
+
+  const [authLoading, setAuthLoading] = useState(false);
 
   const [formData, setFormData] = useState({
     title: '',
@@ -131,6 +159,90 @@ function App() {
   /* -------------------------------------------------
      Form input
   -------------------------------------------------- */
+  // Authentication functions
+const handleAuthChange = (e) => {
+  setAuthData({
+    ...authData,
+    [e.target.name]: e.target.value,
+  });
+};
+
+const handleAuthSubmit = async (e) => {
+  e.preventDefault();
+  setAuthLoading(true);
+
+  try {
+    const endpoint =
+      authMode === 'login'
+        ? 'http://localhost:5000/api/auth/login'
+        : 'http://localhost:5000/api/auth/register';
+
+    const payload =
+      authMode === 'login'
+        ? {
+            email: authData.email,
+            password: authData.password,
+          }
+        : {
+            name: authData.name,
+            email: authData.email,
+            password: authData.password,
+          };
+
+    const res = await axios.post(endpoint, payload);
+
+    if (authMode === 'register') {
+      alert('Registration successful. Please login.');
+
+      setAuthMode('login');
+
+      setAuthData({
+        name: '',
+        email: authData.email,
+        password: '',
+      });
+
+      return;
+    }
+
+    const { token, user } = res.data;
+
+    localStorage.setItem('civicpulse_token', token);
+    localStorage.setItem('civicpulse_user', JSON.stringify(user));
+
+    setToken(token);
+    setUser(user);
+
+    setAuthData({
+      name: '',
+      email: '',
+      password: '',
+    });
+
+    alert('Login successful!');
+  } catch (err) {
+    console.error('Authentication error:', err);
+
+    alert(
+      err.response?.data?.error ||
+        'Authentication failed.'
+    );
+  } finally {
+    setAuthLoading(false);
+  }
+};
+
+const handleLogout = () => {
+  localStorage.removeItem('civicpulse_token');
+  localStorage.removeItem('civicpulse_user');
+
+  setToken(null);
+  setUser(null);
+
+  alert('Logged out successfully.');
+};
+
+
   const handleChange = (e) => {
     setFormData({
       ...formData,
@@ -289,7 +401,10 @@ function App() {
   -------------------------------------------------- */
   const handleSubmit = async (e) => {
     e.preventDefault();
-
+    if (!token || !user) {
+  alert('Please login before reporting an issue.');
+  return;
+  }
     if (!selectedLocation) {
       alert(
         'Please select the incident location on the map.'
@@ -357,15 +472,15 @@ function App() {
       }
 
       await axios.post(
-        'http://localhost:5000/api/issues',
-        data,
-        {
-          headers: {
-            'Content-Type':
-              'multipart/form-data',
-          },
-        }
-      );
+  'http://localhost:5000/api/issues',
+  data,
+  {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+      Authorization: `Bearer ${token}`,
+    },
+  }
+);
 
       alert(
         'Incident reported successfully!'
@@ -507,31 +622,158 @@ function App() {
 
         </div>
 
-        <div className="user-status-card">
+        {user ? (
+  <div className="user-status-card">
 
-          <div className="user-avatar-badge">
-            U
-          </div>
+    <div className="user-avatar-badge">
+      {user.name?.charAt(0).toUpperCase()}
+    </div>
 
-          <div className="user-details">
+    <div className="user-details">
 
-            <div className="user-name">
-              Citizen User
-            </div>
+      <div className="user-name">
+        {user.name}
+      </div>
 
-            <div className="user-indicator">
-              ● Verified Profile
-            </div>
+      <div className="user-indicator">
+        ● Logged In
+      </div>
 
-          </div>
+    </div>
 
-        </div>
+    <button
+      type="button"
+      className="refresh-map-button"
+      onClick={handleLogout}
+    >
+      Logout
+    </button>
+
+  </div>
+) : (
+  <button
+    type="button"
+    className="gps-button"
+    onClick={() => {
+      setAuthMode('login');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }}
+  >
+    Login
+  </button>
+)}
 
       </header>
 
       {/* =========================================
           PAGE HEADER
       ========================================== */}
+
+      {!user && (
+  <section
+    className="grid-panel"
+    style={{ margin: '25px 5% 0' }}
+  >
+    <div className="panel-header">
+      <div>
+        <h2 className="panel-heading">
+          {authMode === 'login'
+            ? 'Citizen Login'
+            : 'Citizen Registration'}
+        </h2>
+
+        <p className="panel-subheading">
+          {authMode === 'login'
+            ? 'Login to report and track civic issues.'
+            : 'Create your citizen account to report issues.'}
+        </p>
+      </div>
+    </div>
+
+    <form
+      onSubmit={handleAuthSubmit}
+      className="incident-form"
+    >
+      {authMode === 'register' && (
+        <div className="form-field-group">
+          <label className="field-label">
+            Name <span>*</span>
+          </label>
+
+          <input
+            className="text-control"
+            type="text"
+            name="name"
+            placeholder="Enter your name"
+            value={authData.name}
+            onChange={handleAuthChange}
+            required
+          />
+        </div>
+      )}
+
+      <div className="form-field-group">
+        <label className="field-label">
+          Email <span>*</span>
+        </label>
+
+        <input
+          className="text-control"
+          type="email"
+          name="email"
+          placeholder="Enter your email"
+          value={authData.email}
+          onChange={handleAuthChange}
+          required
+        />
+      </div>
+
+      <div className="form-field-group">
+        <label className="field-label">
+          Password <span>*</span>
+        </label>
+
+        <input
+          className="text-control"
+          type="password"
+          name="password"
+          placeholder="Enter your password"
+          value={authData.password}
+          onChange={handleAuthChange}
+          required
+        />
+      </div>
+
+      <button
+        type="submit"
+        className="btn-report-submit"
+        disabled={authLoading}
+      >
+        {authLoading
+          ? 'Please wait...'
+          : authMode === 'login'
+            ? 'Login'
+            : 'Create Account'}
+      </button>
+
+      <p
+        className="submit-note"
+        style={{ cursor: 'pointer' }}
+        onClick={() =>
+          setAuthMode(
+            authMode === 'login'
+              ? 'register'
+              : 'login'
+          )
+        }
+      >
+        {authMode === 'login'
+          ? 'New citizen? Create an account'
+          : 'Already registered? Login'}
+      </p>
+    </form>
+  </section>
+)}
 
       <section className="page-intro">
 
@@ -1108,10 +1350,10 @@ function App() {
                   return null;
                 }
 
-                const longitude =
+                const latitude =
                   Number(coordinates[0]);
 
-                const latitude =
+                const longitude =
                   Number(coordinates[1]);
 
                 if (
@@ -1129,6 +1371,7 @@ function App() {
                       latitude,
                       longitude,
                     ]}
+                    icon={redMarkerIcon}
                   >
 
                     <Popup>
