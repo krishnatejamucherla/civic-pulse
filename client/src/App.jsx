@@ -522,26 +522,31 @@ const handleLogout = () => {
   /* -------------------------------------------------
      Upvote
   -------------------------------------------------- */
-  const handleUpvote = async (id) => {
-    try {
-      const res = await axios.patch(
-        `http://localhost:5000/api/issues/${id}/upvote`
-      );
+ 
+const handleUpvote = async (id) => {
+  try {
+    const res = await axios.patch(
+      `http://localhost:5000/api/issues/${id}/upvote`,
+      {},
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
 
-      setIssues((previous) =>
-        previous.map((item) =>
-          item._id === id
-            ? res.data
-            : item
-        )
-      );
-    } catch (err) {
-      console.error(
-        'Upvote failed:',
-        err
-      );
-    }
-  };
+    setIssues((previous) =>
+      previous.map((item) =>
+        item._id === id ? res.data : item
+      )
+    );
+  } catch (err) {
+    const message =
+      err.response?.data?.error || 'Upvote failed';
+
+    alert(message);
+  }
+};
 
   /* -------------------------------------------------
      Statistics

@@ -60,9 +60,16 @@ const issueSchema = new mongoose.Schema(
     },
 
     upvotes: {
-      type: Number,
-      default: 0,
+  type: Number,
+  default: 0,
+},
+
+  upvotedBy: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
     },
+  ],
   },
   {
     timestamps: true,

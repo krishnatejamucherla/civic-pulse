@@ -97,23 +97,48 @@ router.get('/', async (req, res) => {
 });
 
 // PATCH /api/issues/:id/upvote -> upvote an issue
-router.patch('/:id/upvote', async (req, res) => {
+// PATCH /api/issues/:id/upvote -> one upvote per citizen
+router.patch('/:id/upvote', authMiddleware, async (req, res) => {
   try {
-    const updatedIssue = await Issue.findByIdAndUpdate(
-      req.params.id,
-      { $inc: { upvotes: 1 } },
-      { returnDocument: 'after' }
-    );
+    const updatedIssue = await Issue.findOneAndUpdate(
+      {
+        _id: req.params.id,
+        upvotedBy: { $ne: req.user.userId },
+      },
+      {
+        $addToSet: { upvotedBy: req.user.userId },
+        $inc: { upvotes: 1 },
+      },
+      {
+        new: true,
+      }
+    ).populate('reportedBy', 'name email');
 
-    if (!updatedIssue) {
+    if (updatedIssue) {
+      return res.status(200).json(updatedIssue);
+    }
+
+    const issueExists = await Issue.exists({
+      _id: req.params.id,
+    });
+
+    if (!issueExists) {
       return res.status(404).json({
         error: 'Issue not found',
       });
     }
 
-    res.status(200).json(updatedIssue);
+    return res.status(409).json({
+      error: 'You have already upvoted this issue',
+    });
   } catch (error) {
-    res.status(400).json({
+    if (error.name === 'CastError') {
+      return res.status(400).json({
+        error: 'Invalid issue ID',
+      });
+    }
+
+    return res.status(500).json({
       error: error.message,
     });
   }
