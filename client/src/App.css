@@ -1230,3 +1230,23 @@ button {
   }
 
 }
+
+
+.verification-card {
+  margin: 16px;
+  padding: 18px;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  background: #f8fafc;
+  color: #1e293b;
+}
+
+.verification-card h3 {
+  margin-top: 0;
+  margin-bottom: 12px;
+}
+
+.verification-card p {
+  margin: 8px 0;
+  line-height: 1.5;
+}

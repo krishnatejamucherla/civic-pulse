@@ -79,7 +79,7 @@ const redMarkerIcon = L.divIcon({
 
 function App() {
   const [issues, setIssues] = useState([]);
-
+  const [verificationIssueId, setVerificationIssueId] = useState(null);
   // Authentication
   const [token, setToken] = useState(
     localStorage.getItem('civicpulse_token')
@@ -101,12 +101,12 @@ function App() {
   const [authLoading, setAuthLoading] = useState(false);
 
   const [formData, setFormData] = useState({
-    title: '',
-    category: 'Road Damage / Potholes',
-    description: '',
-    address: '',
-  });
-
+  title: '',
+  category: 'Road Damage / Potholes',
+  severity: 'Medium',
+  description: '',
+  address: '',
+});
   // The location selected for the incident.
   // Format for Leaflet: [latitude, longitude]
   const [selectedLocation, setSelectedLocation] = useState(null);
@@ -155,6 +155,27 @@ function App() {
     // Automatically request browser location
     getCurrentLocation();
   }, []);
+
+  useEffect(() => {
+  if (!verificationIssueId) return;
+
+  const issue = issues.find(
+    (item) => item._id === verificationIssueId
+  );
+
+  if (
+    issue &&
+    issue.imageVerificationStatus !== 'Pending Verification'
+  ) {
+    return;
+  }
+
+  const timer = setInterval(() => {
+    fetchIssues();
+  }, 3000);
+
+  return () => clearInterval(timer);
+}, [verificationIssueId, issues]);
 
   /* -------------------------------------------------
      Form input
@@ -444,6 +465,11 @@ const handleLogout = () => {
       );
 
       data.append(
+      'severity',
+      formData.severity
+    );
+
+      data.append(
         'description',
         formData.description
       );
@@ -471,7 +497,7 @@ const handleLogout = () => {
         );
       }
 
-      await axios.post(
+     const response = await axios.post(
   'http://localhost:5000/api/issues',
   data,
   {
@@ -482,18 +508,16 @@ const handleLogout = () => {
   }
 );
 
-      alert(
-        'Incident reported successfully!'
-      );
+setVerificationIssueId(response.data._id);
 
       // Reset form
-      setFormData({
-        title: '',
-        category:
-          'Road Damage / Potholes',
-        description: '',
-        address: '',
-      });
+     setFormData({
+      title: '',
+      category: 'Road Damage / Potholes',
+      severity: 'Medium',
+      description: '',
+      address: '',
+    });
 
       setSelectedFile(null);
       setFilePreview(null);
@@ -895,6 +919,48 @@ const handleUpvote = async (id) => {
 
       <main className="app-viewport">
 
+        {verificationIssueId && (() => {
+          const verifiedIssue = issues.find(
+            (item) => item._id === verificationIssueId
+          );
+
+          if (!verifiedIssue) {
+            return (
+              <div className="verification-card">
+                <h3>AI Image Verification</h3>
+                <p>Loading complaint details...</p>
+              </div>
+            );
+          }
+
+          const status = verifiedIssue.imageVerificationStatus;
+          const isPending = status === 'Pending Verification';
+
+          return (
+            <div className="verification-card">
+              <h3>AI Image Verification</h3>
+
+              <p>
+                <strong>Status:</strong>{' '}
+                {isPending ? 'Verification in progress...' : status}
+              </p>
+
+              <p>
+                <strong>Reason:</strong>{' '}
+                {verifiedIssue.imageVerificationReason ||
+                  'No explanation available.'}
+              </p>
+
+              {isPending && (
+                <p>
+                  Please wait. This result updates automatically.
+                </p>
+              )}
+            </div>
+          );
+        })()}
+
+
         {/* =====================================
             LEFT: REPORT FORM
         ====================================== */}
@@ -988,6 +1054,29 @@ const handleUpvote = async (id) => {
               </select>
 
             </div>
+
+
+{/* SEVERITY */}
+
+<div className="form-field-group">
+  <label className="field-label">
+    Issue Severity
+    <span>*</span>
+  </label>
+
+  <select
+    className="select-control"
+    name="severity"
+    value={formData.severity}
+    onChange={handleChange}
+    required
+  >
+    <option value="Low">Low</option>
+    <option value="Medium">Medium</option>
+    <option value="High">High</option>
+    <option value="Critical">Critical</option>
+  </select>
+</div>
 
             {/* DESCRIPTION */}
 
@@ -1406,7 +1495,17 @@ const handleUpvote = async (id) => {
                           <span className="popup-tag">
                             {issue.category}
                           </span>
+                          <span className="popup-tag">
+                      Severity: {issue.severity || 'Medium'}
+                        </span>
 
+                          <span className="popup-tag">
+                      Department: {issue.department || 'General Department'}
+                          </span>
+
+                          <span className="popup-tag">
+                            Priority: {issue.priority || 'Low'}
+                          </span>
                           <button
                             className="upvote-button"
                             onClick={() =>

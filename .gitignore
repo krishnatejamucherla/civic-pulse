@@ -1,3 +1,5 @@
 node_modules/
 .env
 .DS_Store
+# Uploaded complaint images
+server/uploads/

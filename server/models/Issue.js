@@ -42,6 +42,24 @@ const issueSchema = new mongoose.Schema(
       default: 'Reported',
     },
 
+    severity: {
+  type: String,
+  enum: ['Low', 'Medium', 'High', 'Critical'],
+  default: 'Medium',
+},
+
+department: {
+  type: String,
+  enum: [
+    'Roads Department',
+    'Streetlight Department',
+    'Sanitation Department',
+    'Water Supply Department',
+    'General Department',
+  ],
+  default: 'General Department',
+},
+
     location: {
       address: {
         type: String,
@@ -59,6 +77,25 @@ const issueSchema = new mongoose.Schema(
       default: '',
     },
 
+
+imageVerificationStatus: {
+  type: String,
+  enum: [
+    'Not Checked',
+    'Pending Verification',
+    'Likely Relevant',
+    'Needs Review',
+    'Mismatch',
+  ],
+  default: 'Not Checked',
+},
+
+imageVerificationReason: {
+  type: String,
+  default: '',
+},
+
+
     upvotes: {
   type: Number,
   default: 0,
@@ -72,10 +109,34 @@ const issueSchema = new mongoose.Schema(
   ],
   },
   {
-    timestamps: true,
-  }
+  timestamps: true,
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true },
+}
 );
 
 const Issue = mongoose.model('Issue', issueSchema);
+
+issueSchema.virtual('priorityScore').get(function () {
+  const severityScores = {
+    Low: 1,
+    Medium: 2,
+    High: 3,
+    Critical: 4,
+  };
+
+  const severityScore = severityScores[this.severity] || 2;
+  const voteScore = Math.min(this.upvotes || 0, 20) * 0.1;
+
+  return Number((severityScore + voteScore).toFixed(1));
+});
+
+issueSchema.virtual('priority').get(function () {
+  const score = this.priorityScore;
+
+  if (score >= 4) return 'High';
+  if (score >= 3) return 'Medium';
+  return 'Low';
+});
 
 export default Issue;

@@ -1,8 +1,10 @@
+import VerificationJob from '../models/VerificationJob.js';
 import express from 'express';
 import multer from 'multer';
 import fs from 'fs';
 import Issue from '../models/Issue.js';
 import authMiddleware from '../middleware/authMiddleware.js';
+import { verifyIssueImage } from '../services/geminiService.js';
 
 const router = express.Router();
 
@@ -31,29 +33,50 @@ const upload = multer({
   },
 });
 
-// POST /api/issues -> create issue with image
-// Authentication required
+
 router.post(
   '/',
   authMiddleware,
   upload.single('image'),
   async (req, res) => {
+    let savedIssue;
+
     try {
       const {
         title,
         description,
         category,
+        severity,
         address,
         latitude,
         longitude,
       } = req.body;
 
+      const issueCategory =
+        category || 'Road Damage / Potholes';
+
+      const departmentMap = {
+        'Road Damage / Potholes': 'Roads Department',
+        'Streetlight Fault': 'Streetlight Department',
+        'Garbage Overflow': 'Sanitation Department',
+        'Water Supply Issue': 'Water Supply Department',
+      };
+
+      const department =
+        departmentMap[issueCategory] || 'General Department';
+
       const issueData = {
         title,
         description,
-        category: category || 'Road Damage / Potholes',
+        category: issueCategory,
 
-        // Citizen who submitted the issue
+        severity: ['Low', 'Medium', 'High', 'Critical'].includes(
+          severity
+        )
+          ? severity
+          : 'Medium',
+
+        department,
         reportedBy: req.user.userId,
 
         location: {
@@ -69,17 +92,60 @@ router.post(
           : '',
       };
 
-      const newIssue = new Issue(issueData);
-      const savedIssue = await newIssue.save();
+      if (req.file) {
+        issueData.imageVerificationStatus = 'Pending Verification';
+        issueData.imageVerificationReason =
+          'AI verification is waiting in the background queue.';
+      } else {
+        issueData.imageVerificationStatus = 'Not Checked';
+        issueData.imageVerificationReason =
+          'No image was uploaded.';
+      }
 
-      res.status(201).json(savedIssue);
+      // Save the complaint first.
+      savedIssue = await new Issue(issueData).save();
+
+      // Persist the verification job before returning success.
+      if (req.file) {
+        try {
+          await VerificationJob.create({
+            issueId: savedIssue._id,
+            imagePath: req.file.path,
+            category: issueCategory,
+          });
+        } catch (jobError) {
+          // Avoid leaving a complaint stuck without a queued job.
+          await Issue.findByIdAndDelete(savedIssue._id);
+          savedIssue = null;
+          throw jobError;
+        }
+      }
+
+      return res.status(201).json(savedIssue);
     } catch (error) {
-      res.status(400).json({
-        error: error.message,
+      console.error('Issue submission failed:', error.message);
+
+      // Remove the uploaded file if submission failed.
+      if (req.file && !savedIssue) {
+        try {
+          if (fs.existsSync(req.file.path)) {
+            fs.unlinkSync(req.file.path);
+          }
+        } catch (fileError) {
+          console.error(
+            'Could not remove uploaded file:',
+            fileError.message
+          );
+        }
+      }
+
+      return res.status(500).json({
+        error: 'Could not submit the issue. Please try again.',
       });
     }
   }
 );
+
 
 // GET /api/issues -> list all issues
 router.get('/', async (req, res) => {
