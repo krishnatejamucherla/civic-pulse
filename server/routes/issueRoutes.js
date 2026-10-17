@@ -1,3 +1,5 @@
+import User from '../models/User.js';
+import allowRoles from '../middleware/roleMiddleware.js';
 import VerificationJob from '../models/VerificationJob.js';
 import express from 'express';
 import multer from 'multer';
@@ -210,4 +212,99 @@ router.patch('/:id/upvote', authMiddleware, async (req, res) => {
   }
 });
 
+// Get complaints assigned to the logged-in department
+// Update complaint status — department staff or admin only
+router.patch(
+  '/:id/status',
+  authMiddleware,
+  allowRoles('department', 'admin'),
+  async (req, res) => {
+    try {
+      const { status, note = '' } = req.body;
+      const allowedStatuses = ['Reported', 'In Progress', 'Resolved'];
+
+      if (!allowedStatuses.includes(status)) {
+        return res.status(400).json({ error: 'Invalid complaint status' });
+      }
+
+      const user = await User.findById(req.user.userId);
+
+      if (!user || !['department', 'admin'].includes(user.role)) {
+        return res.status(403).json({ error: 'Department staff or admin access required' });
+      }
+
+      const issue = await Issue.findById(req.params.id);
+
+      if (!issue) {
+        return res.status(404).json({ error: 'Complaint not found' });
+      }
+
+      if (
+        user.role === 'department' &&
+        (!user.department || user.department !== issue.department)
+      ) {
+        return res.status(403).json({
+          error: 'You cannot update complaints assigned to another department',
+        });
+      }
+
+      issue.status = status;
+      issue.statusHistory.push({
+        status,
+        updatedBy: user._id,
+        note: String(note).trim().slice(0, 500),
+        changedAt: new Date(),
+      });
+
+      await issue.save();
+
+      return res.json({
+        message: 'Complaint status updated successfully',
+        issue,
+      });
+    } catch (error) {
+      console.error('Status update error:', error.message);
+      return res.status(500).json({ error: 'Failed to update complaint status' });
+    }
+  }
+);
+router.get(
+  '/department',
+  authMiddleware,
+  allowRoles('department', 'admin'),
+  async (req, res) => {
+    try {
+      const user = await User.findById(req.user.userId);
+
+      if (!user || !['department', 'admin'].includes(user.role)) {
+        return res.status(403).json({
+          error: 'Department staff or admin access required',
+        });
+      }
+
+      const filter =
+        user.role === 'admin'
+          ? {}
+          : { department: user.department };
+
+      if (user.role === 'department' && !user.department) {
+        return res.status(403).json({
+          error: 'No department assigned to this account',
+        });
+      }
+
+      const issues = await Issue.find(filter)
+        .populate('reportedBy', 'name email')
+        .sort({ createdAt: -1 });
+
+      res.json(issues);
+    } catch (error) {
+      console.error('Department complaints error:', error.message);
+
+      res.status(500).json({
+        error: 'Failed to fetch department complaints',
+      });
+    }
+  }
+);
 export default router;

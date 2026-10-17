@@ -1,3 +1,4 @@
+
 import mongoose from 'mongoose';
 
 const userSchema = new mongoose.Schema(
@@ -23,8 +24,20 @@ const userSchema = new mongoose.Schema(
 
     role: {
       type: String,
-      enum: ['citizen', 'admin'],
+      enum: ['citizen', 'department', 'admin'],
       default: 'citizen',
+    },
+
+    department: {
+      type: String,
+      enum: [
+        'Roads Department',
+        'Streetlight Department',
+        'Sanitation Department',
+        'Water Supply Department',
+        'General Department',
+      ],
+      default: null,
     },
   },
   {

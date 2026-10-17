@@ -1,3 +1,4 @@
+import DepartmentDashboard from './DepartmentDashboard';
 import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import L from 'leaflet';
@@ -599,6 +600,16 @@ const handleUpvote = async (id) => {
         issue.status?.toLowerCase() ===
         'resolved'
     ).length;
+
+      if (user && ['department', 'admin'].includes(user.role)) {
+  return (
+    <DepartmentDashboard
+      token={token}
+      user={user}
+      onLogout={handleLogout}
+    />
+  );
+}
 
   return (
     <div className="civic-app">

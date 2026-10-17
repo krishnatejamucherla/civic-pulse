@@ -101,10 +101,35 @@ imageVerificationReason: {
   default: 0,
 },
 
-  upvotedBy: [
+    upvotedBy: [
     {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
+    },
+  ],
+
+  // ADD statusHistory HERE
+  statusHistory: [
+    {
+      status: {
+        type: String,
+        enum: ['Reported', 'In Progress', 'Resolved'],
+        required: true,
+      },
+      updatedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true,
+      },
+      note: {
+        type: String,
+        trim: true,
+        default: '',
+      },
+      changedAt: {
+        type: Date,
+        default: Date.now,
+      },
     },
   ],
   },
