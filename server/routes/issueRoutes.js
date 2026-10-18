@@ -147,8 +147,36 @@ router.post(
   }
 );
 
+/* GET /api/issues/my-reports
+   Return only complaints submitted by the logged-in citizen.
+*/
+router.get('/my-reports', authMiddleware, async (req, res) => {
+  try {
+    const issues = await Issue.find({
+      reportedBy: req.user.userId,
+    })
+      .populate('resolvedBy', 'name')
+      .sort({ createdAt: -1 });
+
+    res.status(200).json(issues);
+  } catch (error) {
+    console.error('Failed to fetch citizen reports:', error.message);
+
+    res.status(500).json({
+      error: 'Failed to fetch your reports.',
+    });
+  }
+});
+
 
 // GET /api/issues -> list all issues
+
+/* GET /api/issues/my-reports
+   Return only complaints submitted by the logged-in user.
+*/
+
+
+
 router.get('/', async (req, res) => {
   try {
     const issues = await Issue.find()

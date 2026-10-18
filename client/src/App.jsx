@@ -71,15 +71,29 @@ function MapClickHandler({ onLocationSelect }) {
 }
 
 
-const redMarkerIcon = L.divIcon({
-  className: 'red-marker',
-  html: '<div style="background:red;width:18px;height:18px;border-radius:50%;border:3px solid white;"></div>',
-  iconSize: [24, 24],
-  iconAnchor: [12, 12],
-});
+const createStatusMarker = (color) =>
+  L.divIcon({
+    className: 'status-marker',
+    html: `<div style="background:${color};width:18px;height:18px;border-radius:50%;border:3px solid white;box-shadow:0 1px 5px rgba(0,0,0,0.4);"></div>`,
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+  });
+
+const statusMarkerIcons = {
+  Reported: createStatusMarker('#dc2626'),
+  'In Progress': createStatusMarker('#f59e0b'),
+  Resolved: createStatusMarker('#16a34a'),
+};
+
+const getStatusMarker = (status) =>
+  statusMarkerIcons[status] || statusMarkerIcons.Reported;
 
 function App() {
   const [issues, setIssues] = useState([]);
+  const [myReports, setMyReports] = useState([]);
+const [myReportsLoading, setMyReportsLoading] = useState(false);
+const [myReportsError, setMyReportsError] = useState('');
+const [showMyReports, setShowMyReports] = useState(false);
   const [verificationIssueId, setVerificationIssueId] = useState(null);
   // Authentication
   const [token, setToken] = useState(
@@ -146,6 +160,37 @@ function App() {
       );
     }
   };
+
+  const fetchMyReports = async () => {
+  if (!token) {
+    setMyReports([]);
+    setMyReportsError('Please log in to view your reports.');
+    return;
+  }
+
+  setMyReportsLoading(true);
+  setMyReportsError('');
+
+  try {
+    const response = await axios.get(
+      `${API_BASE}/api/issues/my-reports`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    setMyReports(response.data);
+  } catch (error) {
+    setMyReportsError(
+      error.response?.data?.error ||
+      'Unable to load your reports. Please try again.'
+    );
+  } finally {
+    setMyReportsLoading(false);
+  }
+};
 
   /* -------------------------------------------------
      Initial loading
@@ -654,8 +699,24 @@ const handleUpvote = async (id) => {
             </button>
 
             <button className="nav-item-btn">
-              <TrendingUp size={16} />
-              Track Reports
+              <button
+                type="button"
+                className={`nav-item-btn ${showMyReports ? 'active' : ''}`}
+                onClick={() => {
+                  setShowMyReports(true);
+
+                  if (token) {
+                    fetchMyReports();
+                  } else {
+                    setMyReportsError('Please log in to view your reports.');
+                  }
+
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+              >
+                <TrendingUp size={16} />
+                Track Reports
+              </button>
             </button>
 
           </nav>
@@ -927,6 +988,253 @@ const handleUpvote = async (id) => {
       {/* =========================================
           MAIN DASHBOARD
       ========================================== */}
+
+      {showMyReports && (
+        <section
+          className="grid-panel"
+          style={{ margin: '25px 5%', padding: '24px' }}
+        >
+          <div className="panel-header">
+            <div>
+              <h2 className="panel-heading">My Reports</h2>
+              <p className="panel-subheading">
+                Track the progress and resolution of your civic complaints.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              className="refresh-map-button"
+              onClick={fetchMyReports}
+              disabled={myReportsLoading || !token}
+            >
+              {myReportsLoading ? 'Loading...' : 'Refresh'}
+            </button>
+          </div>
+
+          {!token ? (
+            <p>Please log in to view your reports.</p>
+          ) : myReportsLoading && myReports.length === 0 ? (
+            <p>Loading your reports...</p>
+          ) : myReportsError ? (
+            <div>
+              <p role="alert">{myReportsError}</p>
+              <button
+                type="button"
+                className="refresh-map-button"
+                onClick={fetchMyReports}
+              >
+                Try Again
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="stats-container">
+                <div className="stat-card">
+                  <div className="stat-icon stat-blue">📋</div>
+                  <div>
+                    <span>Total Reports</span>
+                    <strong>{myReports.length}</strong>
+                  </div>
+                </div>
+
+                <div className="stat-card">
+                  <div className="stat-icon stat-orange">🔄</div>
+                  <div>
+                    <span>In Progress</span>
+                    <strong>
+                      {myReports.filter(
+                        (issue) => issue.status === 'In Progress'
+                      ).length}
+                    </strong>
+                  </div>
+                </div>
+
+                <div className="stat-card">
+                  <div className="stat-icon stat-green">✓</div>
+                  <div>
+                    <span>Resolved</span>
+                    <strong>
+                      {myReports.filter(
+                        (issue) => issue.status === 'Resolved'
+                      ).length}
+                    </strong>
+                  </div>
+                </div>
+              </div>
+
+              {myReports.length === 0 ? (
+                <p>You haven't submitted any reports yet.</p>
+              ) : (
+                <div style={{ display: 'grid', gap: '20px' }}>
+                  {myReports.map((issue) => (
+                    <article
+                      key={issue._id}
+                      style={{
+                        border: '1px solid #dbe2ea',
+                        borderRadius: '12px',
+                        padding: '18px',
+                        overflowWrap: 'anywhere',
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          gap: '12px',
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <h3 style={{ margin: 0 }}>
+                          {issue.title || issue.category || 'Civic Report'}
+                        </h3>
+
+                        <span>
+                          <strong>Status:</strong> {issue.status || 'Reported'}
+                        </span>
+                      </div>
+
+                      <p>
+                        <strong>Report ID:</strong> {issue._id}
+                      </p>
+                      <p>
+                        <strong>Submitted:</strong>{' '}
+                        {issue.createdAt
+                          ? new Date(issue.createdAt).toLocaleString()
+                          : 'Date unavailable'}
+                      </p>
+                      <p>
+                        <strong>Category:</strong> {issue.category || 'N/A'}
+                      </p>
+                      <p>
+                        <strong>Severity:</strong> {issue.severity || 'N/A'}
+                      </p>
+                      <p>
+                        <strong>Department:</strong> {issue.department || 'N/A'}
+                      </p>
+                      <p>
+                        <strong>Location:</strong>{' '}
+                        {issue.location?.address || 'Location unavailable'}
+                      </p>
+                      <p>
+                        <strong>Description:</strong>{' '}
+                        {issue.description || 'No description provided.'}
+                      </p>
+
+                      {issue.imageUrl && (
+                        <div style={{ margin: '14px 0' }}>
+                          <p><strong>Original complaint photo</strong></p>
+                          <img
+                            src={
+                              issue.imageUrl.startsWith('http')
+                                ? issue.imageUrl
+                                : `${API_BASE}${issue.imageUrl.startsWith('/') ? '' : '/'}${issue.imageUrl}`
+                            }
+                            alt="Original complaint"
+                            loading="lazy"
+                            style={{
+                              width: '100%',
+                              maxWidth: '420px',
+                              maxHeight: '280px',
+                              objectFit: 'contain',
+                              borderRadius: '8px',
+                            }}
+                          />
+                        </div>
+                      )}
+
+                      {issue.imageVerificationStatus && (
+                        <p>
+                          <strong>Image verification:</strong>{' '}
+                          {issue.imageVerificationStatus}
+                          {issue.imageVerificationReason
+                            ? ` — ${issue.imageVerificationReason}`
+                            : ''}
+                        </p>
+                      )}
+
+                      <div style={{ marginTop: '18px' }}>
+                        <h4>Status history</h4>
+
+                        {issue.statusHistory?.length ? (
+                          <ol style={{ paddingLeft: '22px' }}>
+                            {issue.statusHistory.map((entry, index) => (
+                              <li key={`${issue._id}-history-${index}`} style={{ marginBottom: '12px' }}>
+                                <strong>{entry.status}</strong>
+                                <div>
+                                  {entry.changedAt
+                                    ? new Date(entry.changedAt).toLocaleString()
+                                    : 'Date unavailable'}
+                                </div>
+                                {entry.note && <p>{entry.note}</p>}
+                              </li>
+                            ))}
+                          </ol>
+                        ) : (
+                          <p>No status history is available yet.</p>
+                        )}
+                      </div>
+
+                      {issue.status === 'Resolved' && (
+                        <div
+                          style={{
+                            marginTop: '16px',
+                            padding: '14px',
+                            background: '#f0fdf4',
+                            borderRadius: '8px',
+                          }}
+                        >
+                          <h4>Resolution details</h4>
+                          <p>
+                            <strong>Resolution note:</strong>{' '}
+                            {issue.resolutionNote || 'No resolution note provided.'}
+                          </p>
+                          <p>
+                            <strong>Resolved on:</strong>{' '}
+                            {issue.resolvedAt
+                              ? new Date(issue.resolvedAt).toLocaleString()
+                              : 'Date unavailable'}
+                          </p>
+                          {issue.resolvedBy?.name && (
+                            <p>
+                              <strong>Resolved by:</strong> {issue.resolvedBy.name}
+                            </p>
+                          )}
+
+                          {issue.repairImageUrl ? (
+                            <div>
+                              <p><strong>Repair photo</strong></p>
+                              <img
+                                src={
+                                  issue.repairImageUrl.startsWith('http')
+                                    ? issue.repairImageUrl
+                                    : `${API_BASE}${issue.repairImageUrl.startsWith('/') ? '' : '/'}${issue.repairImageUrl}`
+                                }
+                                alt="Completed repair"
+                                loading="lazy"
+                                style={{
+                                  width: '100%',
+                                  maxWidth: '420px',
+                                  maxHeight: '280px',
+                                  objectFit: 'contain',
+                                  borderRadius: '8px',
+                                }}
+                              />
+                            </div>
+                          ) : (
+                            <p>Repair photo has not been provided.</p>
+                          )}
+                        </div>
+                      )}
+                    </article>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </section>
+      )}
 
       <main className="app-viewport">
 
@@ -1476,8 +1784,7 @@ const handleUpvote = async (id) => {
                       latitude,
                       longitude,
                     ]}
-                    icon={redMarkerIcon}
-                  >
+                    icon={getStatusMarker(issue.status)}                  >
 
                     <Popup>
 
