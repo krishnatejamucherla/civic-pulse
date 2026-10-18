@@ -90,8 +90,7 @@ router.post(
         },
 
         imageUrl: req.file
-          ? `http://localhost:5000/uploads/${req.file.filename}`
-          : '',
+? `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`          : '',
       };
 
       if (req.file) {
@@ -214,12 +213,18 @@ router.patch('/:id/upvote', authMiddleware, async (req, res) => {
 
 // Get complaints assigned to the logged-in department
 // Update complaint status — department staff or admin only
+
 router.patch(
   '/:id/status',
   authMiddleware,
   allowRoles('department', 'admin'),
+  upload.single('repairImage'),
   async (req, res) => {
+    let uploadedFile;
+
     try {
+      uploadedFile = req.file;
+
       const { status, note = '' } = req.body;
       const allowedStatuses = ['Reported', 'In Progress', 'Resolved'];
 
@@ -227,10 +232,28 @@ router.patch(
         return res.status(400).json({ error: 'Invalid complaint status' });
       }
 
+      const cleanNote = String(note).trim().slice(0, 500);
+
+      if (status === 'Resolved') {
+        if (!cleanNote) {
+          return res.status(400).json({
+            error: 'A resolution note is required.',
+          });
+        }
+
+        if (!uploadedFile) {
+          return res.status(400).json({
+            error: 'Upload an after-repair photo before resolving this complaint.',
+          });
+        }
+      }
+
       const user = await User.findById(req.user.userId);
 
       if (!user || !['department', 'admin'].includes(user.role)) {
-        return res.status(403).json({ error: 'Department staff or admin access required' });
+        return res.status(403).json({
+          error: 'Department staff or admin access required',
+        });
       }
 
       const issue = await Issue.findById(req.params.id);
@@ -248,12 +271,28 @@ router.patch(
         });
       }
 
+      // Prevent changing a resolved complaint back to an active status.
+      if (issue.status === 'Resolved' && status !== 'Resolved') {
+        return res.status(409).json({
+          error: 'Resolved complaints cannot be reopened through this endpoint.',
+        });
+      }
+
+      const now = new Date();
+
+      if (status === 'Resolved') {
+issue.repairImageUrl =
+  `${req.protocol}://${req.get('host')}/uploads/${uploadedFile.filename}`;        issue.resolvedAt = now;
+        issue.resolvedBy = user._id;
+      }
+
       issue.status = status;
+
       issue.statusHistory.push({
         status,
         updatedBy: user._id,
-        note: String(note).trim().slice(0, 500),
-        changedAt: new Date(),
+        note: cleanNote,
+        changedAt: now,
       });
 
       await issue.save();
@@ -264,10 +303,25 @@ router.patch(
       });
     } catch (error) {
       console.error('Status update error:', error.message);
-      return res.status(500).json({ error: 'Failed to update complaint status' });
+
+      return res.status(500).json({
+        error: 'Failed to update complaint status',
+      });
+    } finally {
+      // Keep a successfully saved repair photo. Remove it if the request failed.
+      if (uploadedFile && res.statusCode >= 400) {
+        try {
+          if (fs.existsSync(uploadedFile.path)) {
+            fs.unlinkSync(uploadedFile.path);
+          }
+        } catch (fileError) {
+          console.error('Could not remove repair photo:', fileError.message);
+        }
+      }
     }
   }
 );
+
 router.get(
   '/department',
   authMiddleware,

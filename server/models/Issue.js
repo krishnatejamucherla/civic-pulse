@@ -77,6 +77,31 @@ department: {
       default: '',
     },
 
+    // Photo uploaded by the department after completing repairs
+repairImageUrl: {
+  type: String,
+  default: '',
+},
+
+// Final resolution summary
+resolutionNote: {
+  type: String,
+  trim: true,
+  default: '',
+},
+
+// When the complaint was resolved
+resolvedAt: {
+  type: Date,
+  default: null,
+},
+
+// Department staff member who resolved the complaint
+resolvedBy: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: 'User',
+  default: null,
+},
 
 imageVerificationStatus: {
   type: String,

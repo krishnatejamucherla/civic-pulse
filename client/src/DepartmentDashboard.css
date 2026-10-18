@@ -1639,3 +1639,28 @@
     border-radius: 14px;
   }
 }
+.cp-repair-upload {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px dashed #94a3b8;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.cp-repair-upload label {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.cp-repair-upload input {
+  max-width: 100%;
+  font-size: 13px;
+}
+
+.cp-repair-upload small {
+  color: #475569;
+  overflow-wrap: anywhere;
+}

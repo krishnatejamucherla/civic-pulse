@@ -20,7 +20,7 @@ import {
   UploadCloud,
 } from 'lucide-react';
 import './App.css';
-
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 // Fix standard Leaflet marker display
 delete L.Icon.Default.prototype._getIconUrl;
 
@@ -135,7 +135,7 @@ function App() {
   const fetchIssues = async () => {
     try {
       const res = await axios.get(
-        'http://localhost:5000/api/issues'
+        `${API_BASE}/api/issues`
       );
 
       setIssues(res.data);
@@ -195,9 +195,9 @@ const handleAuthSubmit = async (e) => {
 
   try {
     const endpoint =
-      authMode === 'login'
-        ? 'http://localhost:5000/api/auth/login'
-        : 'http://localhost:5000/api/auth/register';
+  authMode === 'login'
+    ? `${API_BASE}/api/auth/login`
+    : `${API_BASE}/api/auth/register`;
 
     const payload =
       authMode === 'login'
@@ -499,7 +499,7 @@ const handleLogout = () => {
       }
 
      const response = await axios.post(
-  'http://localhost:5000/api/issues',
+  `${API_BASE}/api/issues`,
   data,
   {
     headers: {
@@ -551,7 +551,7 @@ setVerificationIssueId(response.data._id);
 const handleUpvote = async (id) => {
   try {
     const res = await axios.patch(
-      `http://localhost:5000/api/issues/${id}/upvote`,
+      `${API_BASE}/api/issues/${id}/upvote`,
       {},
       {
         headers: {
@@ -1500,6 +1500,57 @@ const handleUpvote = async (id) => {
                         <p>
                           {issue.description}
                         </p>
+                        <div className="popup-lifecycle">
+                          <p>
+                            <strong>Current status:</strong>{' '}
+                            {issue.status || 'Reported'}
+                          </p>
+
+                          {issue.resolutionNote && (
+                            <div>
+                              <strong>Resolution details:</strong>
+                              <p>{issue.resolutionNote}</p>
+                            </div>
+                          )}
+
+                          {issue.repairImageUrl && (
+                            <div>
+                              <strong>After-repair photo:</strong>
+                              <a
+                                href={issue.repairImageUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                <img
+                                  src={issue.repairImageUrl}
+                                  alt={`${issue.title} after repair`}
+                                  className="popup-image"
+                                />
+                                View repair evidence
+                              </a>
+                            </div>
+                          )}
+
+                          {issue.statusHistory?.length > 0 && (
+                            <div>
+                              <strong>Complaint history:</strong>
+                              <ul>
+                                {issue.statusHistory.map((entry, index) => (
+                                  <li key={`${entry.changedAt}-${index}`}>
+                                    <strong>{entry.status}</strong>
+                                    {entry.changedAt && (
+                                      <small>
+                                        {' '}
+                                        — {new Date(entry.changedAt).toLocaleString()}
+                                      </small>
+                                    )}
+                                    {entry.note && <p>{entry.note}</p>}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
 
                         <div className="popup-bottom">
 

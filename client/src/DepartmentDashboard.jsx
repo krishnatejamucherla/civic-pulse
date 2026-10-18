@@ -22,7 +22,8 @@ import {
 } from 'lucide-react';
 import './DepartmentDashboard.css';
 
-const API = 'http://localhost:5000/api/issues';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const API = `${API_BASE}/api/issues`;
 
 const STATUSES = ['Reported', 'In Progress', 'Resolved'];
 
@@ -39,6 +40,7 @@ function DepartmentDashboard({ token, user, onLogout }) {
   const [search, setSearch] = useState('');
   const [notes, setNotes] = useState({});
   const [pendingStatus, setPendingStatus] = useState({});
+  const [repairPhotos, setRepairPhotos] = useState({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [savingId, setSavingId] = useState(null);
@@ -105,54 +107,81 @@ function DepartmentDashboard({ token, user, onLogout }) {
     });
   }, [issues, filter, search]);
 
-  const updateStatus = async (issue) => {
-    const status = pendingStatus[issue._id] ?? issue.status;
 
-    if (!STATUSES.includes(status)) return;
+const updateStatus = async (issue) => {
+  const status = pendingStatus[issue._id] ?? issue.status;
+  const note = (notes[issue._id] || '').trim();
+  const repairPhoto = repairPhotos[issue._id];
 
-    if (status === 'Resolved' && issue.status !== 'Resolved') {
-      const confirmed = window.confirm(
-        'Mark this complaint as resolved? Make sure the work is complete.'
-      );
-      if (!confirmed) return;
+  if (!STATUSES.includes(status)) return;
+
+  if (status === 'Resolved') {
+    if (!note) {
+      setError('Please enter a resolution note before resolving the complaint.');
+      return;
     }
 
-    setSavingId(issue._id);
-    setError('');
+    if (!repairPhoto) {
+      setError('Please upload an after-repair photo before resolving the complaint.');
+      return;
+    }
 
-    try {
-      await axios.patch(
-        `${API}/${issue._id}/status`,
-        {
-          status,
-          note: notes[issue._id] || '',
+    const confirmed = window.confirm(
+      'Mark this complaint as resolved with the uploaded repair photo?'
+    );
+
+    if (!confirmed) return;
+  }
+
+  setSavingId(issue._id);
+  setError('');
+
+  try {
+    const formData = new FormData();
+    formData.append('status', status);
+    formData.append('note', note);
+
+    if (repairPhoto) {
+      formData.append('repairImage', repairPhoto);
+    }
+
+    await axios.patch(
+      `${API}/${issue._id}/status`,
+      formData,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
         },
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
+      }
+    );
 
-      await loadIssues(true);
+    await loadIssues(true);
 
-      setNotes((previous) => ({
-        ...previous,
-        [issue._id]: '',
-      }));
+    setNotes((previous) => ({
+      ...previous,
+      [issue._id]: '',
+    }));
 
-      setPendingStatus((previous) => {
-        const next = { ...previous };
-        delete next[issue._id];
-        return next;
-      });
-    } catch (err) {
-      setError(
-        err.response?.data?.error ||
-          'Unable to update complaint status.'
-      );
-    } finally {
-      setSavingId(null);
-    }
-  };
+    setRepairPhotos((previous) => ({
+      ...previous,
+      [issue._id]: null,
+    }));
+
+    setPendingStatus((previous) => {
+      const next = { ...previous };
+      delete next[issue._id];
+      return next;
+    });
+  } catch (err) {
+    setError(
+      err.response?.data?.error ||
+        'Unable to update complaint status.'
+    );
+  } finally {
+    setSavingId(null);
+  }
+};
+
 
   const selectFilter = (nextFilter) => {
     setFilter(nextFilter);
@@ -547,7 +576,33 @@ function DepartmentDashboard({ token, user, onLogout }) {
                           [issue._id]: event.target.value,
                         }))}
                       />
+                        {(pendingStatus[issue._id] ?? issue.status) === 'Resolved' && (
+                        <div className="cp-repair-upload">
+                            <label htmlFor={`repair-photo-${issue._id}`}>
+                            After-repair photo (required)
+                            </label>
 
+                            <input
+                            id={`repair-photo-${issue._id}`}
+                            type="file"
+                            accept="image/*"
+                            onChange={(event) => {
+                                const file = event.target.files?.[0] || null;
+
+                                setRepairPhotos((previous) => ({
+                                ...previous,
+                                [issue._id]: file,
+                                }));
+                            }}
+                            />
+
+                            {repairPhotos[issue._id] && (
+                            <small>
+                                Selected: {repairPhotos[issue._id].name}
+                            </small>
+                            )}
+                        </div>
+                        )}
                       <button
                         className="cp-button cp-button-primary cp-update-button"
                         disabled={
