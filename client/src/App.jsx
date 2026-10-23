@@ -527,20 +527,57 @@ const getCurrentLocation = () => {
      Select location from map
   -------------------------------------------------- */
 
-const handleLocationSelect = (location) => {
+
+const handleLocationSelect = async (location) => {
   const [latitude, longitude] = location;
 
+  // Update the selected coordinates immediately
   setSelectedLocation([latitude, longitude]);
   setLocationAccuracy(null);
 
+  // Keep a fallback in case address lookup fails
+  const fallbackAddress =
+    `Selected Location: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+
   setFormData((previous) => ({
     ...previous,
-    address: `Selected Location: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
+    address: fallbackAddress,
   }));
 
-  setLocationStatus('Incident location selected on the map.');
-};
+  setLocationStatus('Finding the address for this location...');
 
+  try {
+    const response = await fetch(
+      `${API_BASE}/api/geocoding/reverse?lat=${latitude}&lon=${longitude}`
+    );
+
+    if (!response.ok) {
+      throw new Error('Address lookup failed');
+    }
+
+    const result = await response.json();
+    const readableAddress = result.address;
+
+    if (readableAddress) {
+      setFormData((previous) => ({
+        ...previous,
+        address: readableAddress,
+      }));
+
+      setLocationStatus('Readable incident address found.');
+    } else {
+      setLocationStatus(
+        'Address unavailable. Coordinates have been retained.'
+      );
+    }
+  } catch (error) {
+    console.error('Address lookup error:', error);
+
+    setLocationStatus(
+      'Address lookup unavailable. Coordinates have been retained.'
+    );
+  }
+};
 
   /* -------------------------------------------------
      Drag marker

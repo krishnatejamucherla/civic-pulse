@@ -35,6 +35,63 @@ app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'Civic Pulse backend API is running.' });
 });
 
+// Convert map coordinates into a readable address
+app.get('/api/geocoding/reverse', async (req, res) => {
+  try {
+    const latitude = Number(req.query.lat);
+    const longitude = Number(req.query.lon);
+
+    if (
+      !Number.isFinite(latitude) ||
+      !Number.isFinite(longitude) ||
+      latitude < -90 ||
+      latitude > 90 ||
+      longitude < -180 ||
+      longitude > 180
+    ) {
+      return res.status(400).json({
+        message: 'Valid latitude and longitude are required.',
+      });
+    }
+
+    const params = new URLSearchParams({
+      format: 'jsonv2',
+      lat: String(latitude),
+      lon: String(longitude),
+      addressdetails: '1',
+    });
+
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?${params}`,
+      {
+        headers: {
+          'User-Agent': 'CivicPulse/1.0 (student project)',
+        },
+        signal: AbortSignal.timeout(8000),
+      }
+    );
+
+    if (!response.ok) {
+      return res.status(502).json({
+        message: 'Address lookup is temporarily unavailable.',
+      });
+    }
+
+    const result = await response.json();
+
+    res.json({
+      address: result.display_name || null,
+    });
+  } catch (error) {
+    console.error('Reverse geocoding failed:', error.message);
+
+    res.status(502).json({
+      message: 'Unable to retrieve the address.',
+    });
+  }
+});
+
+
 // MongoDB Atlas Connection
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/civic_pulse';
 
