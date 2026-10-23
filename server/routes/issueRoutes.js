@@ -55,6 +55,27 @@ router.post(
         longitude,
       } = req.body;
 
+      const lat = Number(latitude);
+      const lon = Number(longitude);
+
+      if (
+        latitude === undefined ||
+        longitude === undefined ||
+        String(latitude).trim() === '' ||
+        String(longitude).trim() === '' ||
+        !Number.isFinite(lat) ||
+        !Number.isFinite(lon) ||
+        lat < -90 ||
+        lat > 90 ||
+        lon < -180 ||
+        lon > 180
+      ) {
+        return res.status(400).json({
+          error: 'Please select a valid incident location on the map.',
+        });
+      }
+
+
       const issueCategory =
         category || 'Road Damage / Potholes';
 
@@ -83,11 +104,8 @@ router.post(
         reportedBy: req.user.userId,
 
         location: {
-          address: address || 'Near Main Gate, Hyderabad',
-          coordinates: [
-            Number(latitude) || 17.3850,
-            Number(longitude) || 78.4867,
-          ],
+          address: address?.trim() || `${lat.toFixed(6)}, ${lon.toFixed(6)}`,
+          coordinates: [lat, lon],
         },
 
         imageUrl: req.file
