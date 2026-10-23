@@ -199,8 +199,13 @@ router.get('/my-reports', authMiddleware, async (req, res) => {
 router.get('/', async (req, res) => {
   try {
     const issues = await Issue.find()
-      .populate('reportedBy', 'name email')
-      .sort({ createdAt: -1 });
+      .populate('reportedBy', 'name email');
+
+    issues.sort(
+      (a, b) =>
+        b.priorityScore - a.priorityScore ||
+        new Date(a.createdAt) - new Date(b.createdAt)
+    );
 
     res.status(200).json(issues);
   } catch (error) {
@@ -413,8 +418,13 @@ router.get(
       }
 
       const issues = await Issue.find(filter)
-        .populate('reportedBy', 'name email')
-        .sort({ createdAt: -1 });
+        .populate('reportedBy', 'name email');
+
+      issues.sort(
+        (a, b) =>
+          b.priorityScore - a.priorityScore ||
+          new Date(a.createdAt) - new Date(b.createdAt)
+      );
 
       res.json(issues);
     } catch (error) {

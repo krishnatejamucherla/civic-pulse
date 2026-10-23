@@ -165,28 +165,30 @@ imageVerificationReason: {
 }
 );
 
-const Issue = mongoose.model('Issue', issueSchema);
-
 issueSchema.virtual('priorityScore').get(function () {
   const severityScores = {
-    Low: 1,
-    Medium: 2,
-    High: 3,
-    Critical: 4,
+    Low: 25,
+    Medium: 50,
+    High: 75,
+    Critical: 100,
   };
 
-  const severityScore = severityScores[this.severity] || 2;
-  const voteScore = Math.min(this.upvotes || 0, 20) * 0.1;
+  const severityScore = severityScores[this.severity] || 50;
+  const voteScore = Math.min(Math.max(Number(this.upvotes) || 0, 0), 20) * 0.25;
 
-  return Number((severityScore + voteScore).toFixed(1));
+  const ageDays = this.createdAt
+    ? Math.max(0, (Date.now() - new Date(this.createdAt).getTime()) / 86400000)
+    : 0;
+  const waitingScore = Math.min(ageDays, 30) * 0.25;
+
+  return Number((severityScore + voteScore + waitingScore).toFixed(1));
 });
 
 issueSchema.virtual('priority').get(function () {
-  const score = this.priorityScore;
-
-  if (score >= 4) return 'High';
-  if (score >= 3) return 'Medium';
-  return 'Low';
+  const priorities = ['Low', 'Medium', 'High', 'Critical'];
+  return priorities.includes(this.severity) ? this.severity : 'Medium';
 });
+
+const Issue = mongoose.model('Issue', issueSchema);
 
 export default Issue;
