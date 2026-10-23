@@ -516,7 +516,18 @@ const updateStatus = async (issue) => {
                         <span><ClipboardList size={15} />{issue.category || 'Uncategorized'}</span>
                         <span><Clock3 size={15} />{formatDate(issue.createdAt)}</span>
                       </div>
-
+                      {issue.location?.coordinates?.length >= 2 && (
+                          <a
+                            className="cp-image-link"
+                            href={`https://www.google.com/maps?q=${issue.location.coordinates[0]},${issue.location.coordinates[1]}`}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <MapPin size={15} />
+                            View on Map
+                            <ArrowUpRight size={14} />
+                          </a>
+                        )}
                       <div className="cp-complaint-tags">
                         <span className={`cp-severity cp-severity-${(issue.severity || 'Medium').toLowerCase()}`}>
                           {issue.severity || 'Medium'} severity
