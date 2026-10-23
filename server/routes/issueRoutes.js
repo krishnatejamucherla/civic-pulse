@@ -7,6 +7,7 @@ import fs from 'fs';
 import Issue from '../models/Issue.js';
 import authMiddleware from '../middleware/authMiddleware.js';
 import { verifyIssueImage } from '../services/geminiService.js';
+import Notification from '../models/Notification.js';
 
 const router = express.Router();
 
@@ -305,7 +306,7 @@ router.patch(
           error: 'Resolved complaints cannot be reopened through this endpoint.',
         });
       }
-
+const previousStatus = issue.status;
       const now = new Date();
 
       if (status === 'Resolved') {
@@ -323,12 +324,30 @@ issue.repairImageUrl =
         changedAt: now,
       });
 
-      await issue.save();
 
-      return res.json({
-        message: 'Complaint status updated successfully',
-        issue,
-      });
+await issue.save();
+
+// Notify the citizen only when the complaint status actually changes.
+if (previousStatus !== status && issue.reportedBy) {
+  try {
+    await Notification.create({
+      recipient: issue.reportedBy,
+      issue: issue._id,
+      title: 'Complaint status updated',
+      message: `Your complaint "${issue.title}" has changed from "${previousStatus}" to "${status}".`,
+      status,
+    });
+  } catch (notificationError) {
+    // A notification failure must not undo a successful status update.
+    console.error('Notification creation error:', notificationError.message);
+  }
+}
+
+return res.json({
+  message: 'Complaint status updated successfully',
+  issue,
+});
+
     } catch (error) {
       console.error('Status update error:', error.message);
 

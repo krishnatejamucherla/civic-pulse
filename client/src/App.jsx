@@ -18,7 +18,9 @@ import {
   Camera,
   Crosshair,
   UploadCloud,
+  Bell,
 } from 'lucide-react';
+
 import './App.css';
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 // Fix standard Leaflet marker display
@@ -35,8 +37,7 @@ L.Icon.Default.mergeOptions({
 
 // Fallback map location only.
 // It is NOT automatically submitted as the issue location.
-const defaultCoords = [17.3850, 78.4867];
-
+const defaultCoords = [16.94494, 77.87103];
 /* -------------------------------------------------
    Recenter map whenever selected location changes
 -------------------------------------------------- */
@@ -94,6 +95,10 @@ function App() {
 const [myReportsLoading, setMyReportsLoading] = useState(false);
 const [myReportsError, setMyReportsError] = useState('');
 const [showMyReports, setShowMyReports] = useState(false);
+const [notifications, setNotifications] = useState([]);
+const [unreadCount, setUnreadCount] = useState(0);
+const [showNotifications, setShowNotifications] = useState(false);
+const [notificationsLoading, setNotificationsLoading] = useState(false);
   const [verificationIssueId, setVerificationIssueId] = useState(null);
   // Authentication
   const [token, setToken] = useState(
@@ -131,7 +136,8 @@ const [showMyReports, setShowMyReports] = useState(false);
 
   const [locationLoading, setLocationLoading] =
     useState(false);
-
+  const [locationAccuracy, setLocationAccuracy] = useState(null);
+const locationRequestRef = useRef(false);
   const [selectedFile, setSelectedFile] =
     useState(null);
 
@@ -192,6 +198,93 @@ const [showMyReports, setShowMyReports] = useState(false);
   }
 };
 
+const fetchNotifications = async () => {
+  if (!token) {
+    setNotifications([]);
+    setUnreadCount(0);
+    return;
+  }
+
+  setNotificationsLoading(true);
+
+  try {
+    const response = await axios.get(
+      `${API_BASE}/api/notifications`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    setNotifications(response.data.notifications || []);
+    setUnreadCount(response.data.unreadCount || 0);
+  } catch (error) {
+    console.error(
+      'Failed to load notifications:',
+      error.response?.data?.error || error.message
+    );
+  } finally {
+    setNotificationsLoading(false);
+  }
+};
+
+const markNotificationAsRead = async (notificationId) => {
+  try {
+    await axios.patch(
+      `${API_BASE}/api/notifications/${notificationId}/read`,
+      {},
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    setNotifications((current) =>
+      current.map((notification) =>
+        notification._id === notificationId
+          ? { ...notification, isRead: true }
+          : notification
+      )
+    );
+
+    setUnreadCount((current) => Math.max(0, current - 1));
+  } catch (error) {
+    console.error(
+      'Failed to mark notification as read:',
+      error.response?.data?.error || error.message
+    );
+  }
+};
+
+const markAllNotificationsAsRead = async () => {
+  try {
+    await axios.patch(
+      `${API_BASE}/api/notifications/read-all`,
+      {},
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    setNotifications((current) =>
+      current.map((notification) => ({
+        ...notification,
+        isRead: true,
+      }))
+    );
+
+    setUnreadCount(0);
+  } catch (error) {
+    console.error(
+      'Failed to mark notifications as read:',
+      error.response?.data?.error || error.message
+    );
+  }
+};
   /* -------------------------------------------------
      Initial loading
   -------------------------------------------------- */
@@ -201,7 +294,22 @@ const [showMyReports, setShowMyReports] = useState(false);
     // Automatically request browser location
     getCurrentLocation();
   }, []);
+  useEffect(() => {
+  if (!token) {
+    setNotifications([]);
+    setUnreadCount(0);
+    setShowNotifications(false);
+    return;
+  }
 
+  fetchNotifications();
+
+  const interval = setInterval(() => {
+    fetchNotifications();
+  }, 30000);
+
+  return () => clearInterval(interval);
+}, [token]);
   useEffect(() => {
   if (!verificationIssueId) return;
 
@@ -306,6 +414,10 @@ const handleLogout = () => {
   setToken(null);
   setUser(null);
 
+      setNotifications([]);
+  setUnreadCount(0);
+  setShowNotifications(false);
+
   alert('Logged out successfully.');
 };
 
@@ -320,106 +432,115 @@ const handleLogout = () => {
   /* -------------------------------------------------
      Browser GPS
   -------------------------------------------------- */
-  const getCurrentLocation = () => {
-    if (!navigator.geolocation) {
-      setLocationStatus(
-        'GPS is not supported by this browser'
-      );
-      return;
-    }
 
-    setLocationLoading(true);
-    setLocationStatus(
-      'Detecting your location...'
-    );
 
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const latitude =
-          position.coords.latitude;
+const getCurrentLocation = () => {
+  if (locationRequestRef.current) return;
 
-        const longitude =
-          position.coords.longitude;
+  if (!navigator.geolocation) {
+    setLocationStatus('Location is not supported by this browser.');
+    return;
+  }
 
-        const location = [
-          latitude,
-          longitude,
-        ];
+  if (!window.isSecureContext) {
+    setLocationStatus('Location requires HTTPS or localhost.');
+    return;
+  }
 
-        // Set selected incident location
-        setSelectedLocation(location);
+  locationRequestRef.current = true;
+  setLocationLoading(true);
+  setLocationAccuracy(null);
+  setLocationStatus('Detecting your current location...');
 
-        // Display coordinates in form
-        setFormData((previous) => ({
-          ...previous,
-          address:
-            `GPS Location: ${latitude.toFixed(
-              6
-            )}, ${longitude.toFixed(6)}`,
-        }));
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      locationRequestRef.current = false;
+      setLocationLoading(false);
 
-        setLocationStatus(
-          'GPS location detected'
-        );
+      const { latitude, longitude, accuracy } = position.coords;
 
-        setLocationLoading(false);
-      },
-
-      (error) => {
-        console.error(
-          'Geolocation error:',
-          error
-        );
-
-        let message =
-          'Could not detect location';
-
-        if (error.code === 1) {
-          message =
-            'Location permission denied';
-        } else if (error.code === 2) {
-          message =
-            'Location unavailable';
-        } else if (error.code === 3) {
-          message =
-            'Location request timed out';
-        }
-
-        setLocationStatus(message);
-        setLocationLoading(false);
-      },
-
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0,
+      if (
+        !Number.isFinite(latitude) ||
+        !Number.isFinite(longitude) ||
+        latitude < -90 ||
+        latitude > 90 ||
+        longitude < -180 ||
+        longitude > 180
+      ) {
+        setLocationStatus('The browser returned invalid coordinates.');
+        return;
       }
-    );
-  };
+
+      const measuredAccuracy = Math.round(accuracy);
+
+      setLocationAccuracy(measuredAccuracy);
+
+      // Preserve the detected accuracy when updating the selected location.
+      setSelectedLocation([latitude, longitude]);
+
+      setFormData((previous) => ({
+        ...previous,
+        address: `Detected location (accuracy ±${measuredAccuracy} m): ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
+      }));
+
+      if (accuracy > 100) {
+        setLocationStatus(
+          `Approximate location: ±${measuredAccuracy} m accuracy. You can move the map marker to the incident location.`
+        );
+      } else {
+        setLocationStatus(
+          `Location detected. Accuracy: ±${measuredAccuracy} m.`
+        );
+      }
+    },
+    (error) => {
+      locationRequestRef.current = false;
+      setLocationLoading(false);
+
+      if (error.code === 1) {
+        setLocationStatus(
+          'Location permission denied. Allow location access in Chrome site settings.'
+        );
+      } else if (error.code === 2) {
+        setLocationStatus(
+          'Location unavailable. Check Wi-Fi and Ubuntu location services.'
+        );
+      } else if (error.code === 3) {
+        setLocationStatus(
+          'Location request timed out. Please try again.'
+        );
+      } else {
+        setLocationStatus('Unable to detect location. Please try again.');
+      }
+
+      console.error('Location error:', error.code, error.message);
+    },
+    {
+      enableHighAccuracy: true,
+      timeout: 30000,
+      maximumAge: 0,
+    }
+  );
+};
 
   /* -------------------------------------------------
      Select location from map
   -------------------------------------------------- */
-  const handleLocationSelect = (
-    location
-  ) => {
-    const [latitude, longitude] =
-      location;
 
-    setSelectedLocation(location);
+const handleLocationSelect = (location) => {
+  const [latitude, longitude] = location;
 
-    setFormData((previous) => ({
-      ...previous,
-      address:
-        `Selected Location: ${latitude.toFixed(
-          6
-        )}, ${longitude.toFixed(6)}`,
-    }));
+  setSelectedLocation([latitude, longitude]);
+  setLocationAccuracy(null);
 
-    setLocationStatus(
-      'Incident location selected'
-    );
-  };
+  setFormData((previous) => ({
+    ...previous,
+    address: `Selected Location: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
+  }));
+
+  setLocationStatus('Incident location selected on the map.');
+};
+
 
   /* -------------------------------------------------
      Drag marker
@@ -592,7 +713,7 @@ setVerificationIssueId(response.data._id);
   /* -------------------------------------------------
      Upvote
   -------------------------------------------------- */
- 
+
 const handleUpvote = async (id) => {
   try {
     const res = await axios.patch(
@@ -686,46 +807,138 @@ const handleUpvote = async (id) => {
 
           </div>
 
-          <nav className="nav-links-menu">
 
-            <button className="nav-item-btn active">
-              <PlusCircle size={16} />
-              Report Issue
-            </button>
+<nav className="nav-links-menu">
+  <button
+    type="button"
+    className="nav-item-btn active"
+    onClick={() => {
+  setShowMyReports(false);
 
-            <button className="nav-item-btn">
-              <MapPin size={16} />
-              Live Map
-            </button>
+  document
+    .getElementById('report-issue-section')
+    ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}}
+  >
+    <PlusCircle size={16} />
+    Report Issue
+  </button>
 
-            <button className="nav-item-btn">
-              <button
-                type="button"
-                className={`nav-item-btn ${showMyReports ? 'active' : ''}`}
-                onClick={() => {
-                  setShowMyReports(true);
+  <button
+    type="button"
+    className="nav-item-btn"
+    onClick={() => {
+  setShowMyReports(false);
 
-                  if (token) {
-                    fetchMyReports();
-                  } else {
-                    setMyReportsError('Please log in to view your reports.');
-                  }
+  document
+    .getElementById('live-map-section')
+    ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}}
+  >
+    <MapPin size={16} />
+    Live Map
+  </button>
 
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                }}
-              >
-                <TrendingUp size={16} />
-                Track Reports
-              </button>
-            </button>
+  <button
+    type="button"
+    className={`nav-item-btn ${showMyReports ? 'active' : ''}`}
+    onClick={() => {
+      setShowMyReports(true);
 
-          </nav>
+      if (token) {
+        fetchMyReports();
+      } else {
+        setMyReportsError('Please log in to view your reports.');
+      }
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }}
+  >
+    <TrendingUp size={16} />
+    Track Reports
+  </button>
+</nav>
+
 
         </div>
 
         {user ? (
   <div className="user-status-card">
+        <div className="notification-wrapper">
+      <button
+        type="button"
+        className="notification-bell"
+        aria-label={`Notifications, ${unreadCount} unread`}
+        aria-expanded={showNotifications}
+        onClick={() => {
+          setShowNotifications((current) => !current);
+          fetchNotifications();
+        }}
+      >
+        <Bell size={20} />
 
+        {unreadCount > 0 && (
+          <span className="notification-count">
+            {unreadCount > 99 ? '99+' : unreadCount}
+          </span>
+        )}
+      </button>
+
+      {showNotifications && (
+        <div className="notification-dropdown">
+          <div className="notification-header">
+            <strong>Notifications</strong>
+
+            {unreadCount > 0 && (
+              <button
+                type="button"
+                className="mark-all-read"
+                onClick={markAllNotificationsAsRead}
+              >
+                Mark all read
+              </button>
+            )}
+          </div>
+
+          {notificationsLoading && notifications.length === 0 ? (
+            <p className="notification-empty">Loading notifications...</p>
+          ) : notifications.length === 0 ? (
+            <p className="notification-empty">
+              No notifications yet.
+            </p>
+          ) : (
+            <div className="notification-list">
+              {notifications.map((notification) => (
+                <button
+                  type="button"
+                  key={notification._id}
+                  className={`notification-item ${
+                    notification.isRead ? 'read' : 'unread'
+                  }`}
+                  onClick={() => {
+                    if (!notification.isRead) {
+                      markNotificationAsRead(notification._id);
+                    }
+                  }}
+                >
+                  <span className="notification-item-title">
+                    {notification.title}
+                  </span>
+
+                  <span className="notification-message">
+                    {notification.message}
+                  </span>
+
+                  <span className="notification-date">
+                    {new Date(notification.createdAt).toLocaleString()}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
     <div className="user-avatar-badge">
       {user.name?.charAt(0).toUpperCase()}
     </div>
@@ -909,15 +1122,17 @@ const handleUpvote = async (id) => {
               {locationStatus}
             </strong>
 
-            <span>
-              {selectedLocation
-                ? `${selectedLocation[0].toFixed(
-                    6
-                  )}° N, ${selectedLocation[1].toFixed(
-                    6
-                  )}° E`
-                : 'Select a location on the map'}
-            </span>
+
+<span>
+  {selectedLocation
+    ? `${selectedLocation[0].toFixed(6)}° N, ${selectedLocation[1].toFixed(6)}° E${
+        locationAccuracy !== null
+          ? ` · Accuracy ±${locationAccuracy} m`
+          : ''
+      }`
+    : 'Location not detected yet'}
+</span>
+
 
           </div>
 
@@ -1284,8 +1499,7 @@ const handleUpvote = async (id) => {
             LEFT: REPORT FORM
         ====================================== */}
 
-        <section className="grid-panel">
-
+<section id="report-issue-section" className="grid-panel">
           <div className="panel-header">
 
             <div>
@@ -1611,8 +1825,7 @@ const handleUpvote = async (id) => {
             RIGHT: MAP
         ====================================== */}
 
-        <section className="grid-panel map-panel">
-
+<section id="live-map-section" className="grid-panel map-panel">
           <div className="panel-header">
 
             <div>
